@@ -1,6 +1,7 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
-import net from "node:net";
-import {getServerSocketPath} from "./util";
+import * as net from "node:net";
+import {getServerSocketPath} from "./src/util";
+import {State} from "./src/State";
 
 // Remember to rename these classes and interfaces!
 
@@ -14,10 +15,19 @@ const DEFAULT_SETTINGS: RPCPluginSettings = {
 
 export default class RPCPlugin extends Plugin {
     settings: RPCPluginSettings;
-	ipcServer: any = null;
+	ipcServer: net.Server | null = null;
+	state: State;
 
     async onload() {
         await this.loadSettings();
+
+		// Track all markdown files
+		const vault = this.app.vault;
+		this.state = new State(vault);
+		this.registerEvent(vault.on("create", this.state.vaultOnCreateOrModify.bind(this.state)));
+		this.registerEvent(vault.on("modify", this.state.vaultOnCreateOrModify.bind(this.state)));
+		this.registerEvent(vault.on("delete", this.state.vaultOnDelete.bind(this.state)));
+		this.registerEvent(vault.on("rename", this.state.vaultOnRename.bind(this.state)));
 
 		const sockPath = getServerSocketPath();
 
@@ -30,7 +40,7 @@ export default class RPCPlugin extends Plugin {
 			c.write("hello");
 			c.pipe(c);
 		})
-		server.on("error", (err: any) => {
+		server.on("error", (err: Error) => {
 			console.log(`IPC server got an error ${err}.`);
 			throw err;
 		})
@@ -38,22 +48,6 @@ export default class RPCPlugin extends Plugin {
 		console.log(`server.listen to ${sockPath}`);
 		server.listen(sockPath);
 		console.log("listening!");
-
-		// Track all markdown files
-		const vault = this.app.vault;
-		const _markdownFiles = vault.getMarkdownFiles();
-		vault.on("create", (_file) => {
-
-		});
-		vault.on("modify", (_file) => {
-
-		});
-		vault.on("delete", (_file) => {
-
-		});
-		vault.on("rename", (_file) => {
-
-		});
 
         // This creates an icon in the left ribbon.
         const ribbonIconEl = this.addRibbonIcon('dice', 'Obsidian RPC', (evt: MouseEvent) => {
