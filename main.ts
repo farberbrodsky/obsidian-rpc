@@ -2,6 +2,7 @@ import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Set
 import * as net from "node:net";
 import {getServerSocketPath} from "./src/util";
 import {State} from "./src/State";
+import Client from "src/Client";
 
 // Remember to rename these classes and interfaces!
 
@@ -15,40 +16,94 @@ const DEFAULT_SETTINGS: RPCPluginSettings = {
 
 export default class RPCPlugin extends Plugin {
     settings: RPCPluginSettings;
-	ipcServer: net.Server | null = null;
-	state: State;
+    ipcServer: net.Server | null = null;
+    ipcServerError: Error | null = null;
+    statusBarItem: HTMLElement | null = null;
+    state: State;
+
+    /**
+     * Call after assigning to ipcServer or ipcServerError
+     */
+    updateStatusText(): void {
+        const set = (t: string) => this.statusBarItem?.setText(t);
+        if (this.ipcServer !== null) {
+            set("Noteify running");
+        } else {
+            set("Noteify is down");
+        }
+    }
+
+    /**
+     * Gets full status of the plugin, to show in a modal
+     */
+    getFullStatus(): string {
+        const lines: string[] = [];
+
+        if (this.ipcServer !== null) {
+            lines.push("IPC server is running.");
+        } else {
+            if (this.ipcServerError !== null) {
+                lines.push(`IPC server is down due to an error: ${JSON.stringify(this.ipcServerError.toString())}.`);
+            } else {
+                lines.push("IPC server is down due to an unknown error.");
+            }
+        }
+
+        return lines.join("\n");
+    }
+
+    startIpc(): void {
+        const sockPath = getServerSocketPath();
+        const server = net.createServer({ allowHalfOpen: false }, (socket: net.Socket) => {
+            console.log("client connected");
+            this.state.addClient(new Client(socket));
+        })
+        this.ipcServer = server;
+        this.ipcServerError = null;
+        this.updateStatusText();
+        // there may be an error while opening
+        server.on("error", (err: Error) => {
+            console.error(`Obsidian RPC: IPC server got an error when trying to listen: ${err}.`);
+            this.ipcServer = null;
+            this.ipcServerError = err;
+            this.updateStatusText();
+        })
+        // start listening
+        server.listen(sockPath);
+    }
 
     async onload() {
         await this.loadSettings();
 
-		// Track all markdown files
-		const vault = this.app.vault;
-		this.state = new State(vault);
-		this.registerEvent(vault.on("create", this.state.vaultOnCreateOrModify.bind(this.state)));
-		this.registerEvent(vault.on("modify", this.state.vaultOnCreateOrModify.bind(this.state)));
-		this.registerEvent(vault.on("delete", this.state.vaultOnDelete.bind(this.state)));
-		this.registerEvent(vault.on("rename", this.state.vaultOnRename.bind(this.state)));
+        // Creates a status bar at the bottom, where we can set text.
+        this.statusBarItem = this.addStatusBarItem();
 
-		const sockPath = getServerSocketPath();
+        // Track all markdown files
+        const vault = this.app.vault;
+        this.state = new State(vault);
+        this.registerEvent(vault.on("create", this.state.vaultOnCreateOrModify.bind(this.state)));
+        this.registerEvent(vault.on("modify", this.state.vaultOnCreateOrModify.bind(this.state)));
+        this.registerEvent(vault.on("delete", this.state.vaultOnDelete.bind(this.state)));
+        this.registerEvent(vault.on("rename", this.state.vaultOnRename.bind(this.state)));
 
-		// Open control IPC socket
-		const server = net.createServer({ allowHalfOpen: false }, (c: net.Socket) => {
-			console.log("client connected");
-			c.on("end", () => {
-				console.log("client disconnected")
-			});
-			c.write("hello");
-			c.pipe(c);
-		})
-		server.on("error", (err: Error) => {
-			console.log(`IPC server got an error ${err}.`);
-			throw err;
-		})
-		this.ipcServer = server;
-		console.log(`server.listen to ${sockPath}`);
-		server.listen(sockPath);
-		console.log("listening!");
+        // Initialize with all existing files
+        for (const file of vault.getFiles()) {
+            this.state.vaultOnCreateOrModify(file);
+        }
 
+        // Start listening over a unix domain socket
+        this.startIpc();
+
+        // This adds a simple command that can show IPC status
+        this.addCommand({
+            id: 'show-obsidian-rpc-status',
+            name: 'Show plugin status',
+            callback: () => {
+                new StatusModal(this, this.app).open();
+            }
+        });
+
+        /*
         // This creates an icon in the left ribbon.
         const ribbonIconEl = this.addRibbonIcon('dice', 'Obsidian RPC', (evt: MouseEvent) => {
             // Called when the user clicks the icon.
@@ -56,17 +111,14 @@ export default class RPCPlugin extends Plugin {
         });
         // Perform additional things with the ribbon
         ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-        // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-        const statusBarItemEl = this.addStatusBarItem();
-        statusBarItemEl.setText('Status Bar Text');
+        */
 
         // This adds a simple command that can be triggered anywhere
         this.addCommand({
             id: 'open-sample-modal-simple',
             name: 'Open sample modal (simple)',
             callback: () => {
-                new SampleModal(this.app).open();
+                new StatusModal(this.app).open();
             }
         });
         // This adds an editor command that can perform some operation on the current editor instance
@@ -89,7 +141,7 @@ export default class RPCPlugin extends Plugin {
                     // If checking is true, we're simply "checking" if the command can be run.
                     // If checking is false, then we want to actually perform the operation.
                     if (!checking) {
-                        new SampleModal(this.app).open();
+                        new StatusModal(this, this.app).open();
                     }
 
                     // This command will only show up in Command Palette when the check function returns true
@@ -112,9 +164,9 @@ export default class RPCPlugin extends Plugin {
     }
 
     onunload() {
-		if (this.ipcServer !== null) {
-			this.ipcServer.close();
-		}
+        if (this.ipcServer !== null) {
+            this.ipcServer.close();
+        }
     }
 
     async loadSettings() {
@@ -126,14 +178,14 @@ export default class RPCPlugin extends Plugin {
     }
 }
 
-class SampleModal extends Modal {
-    constructor(app: App) {
+class StatusModal extends Modal {
+    constructor(public plugin: RPCPlugin, app: App) {
         super(app);
     }
 
     onOpen() {
-        const {contentEl} = this;
-        contentEl.setText('Woah!');
+        const {plugin, contentEl} = this;
+        contentEl.setText(plugin.getFullStatus());
     }
 
     onClose() {
