@@ -1,4 +1,6 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import net from "node:net";
+import {getServerSocketPath} from "./util";
 
 // Remember to rename these classes and interfaces!
 
@@ -12,9 +14,46 @@ const DEFAULT_SETTINGS: RPCPluginSettings = {
 
 export default class RPCPlugin extends Plugin {
     settings: RPCPluginSettings;
+	ipcServer: any = null;
 
     async onload() {
         await this.loadSettings();
+
+		const sockPath = getServerSocketPath();
+
+		// Open control IPC socket
+		const server = net.createServer({ allowHalfOpen: false }, (c: net.Socket) => {
+			console.log("client connected");
+			c.on("end", () => {
+				console.log("client disconnected")
+			});
+			c.write("hello");
+			c.pipe(c);
+		})
+		server.on("error", (err: any) => {
+			console.log(`IPC server got an error ${err}.`);
+			throw err;
+		})
+		this.ipcServer = server;
+		console.log(`server.listen to ${sockPath}`);
+		server.listen(sockPath);
+		console.log("listening!");
+
+		// Track all markdown files
+		const vault = this.app.vault;
+		const _markdownFiles = vault.getMarkdownFiles();
+		vault.on("create", (_file) => {
+
+		});
+		vault.on("modify", (_file) => {
+
+		});
+		vault.on("delete", (_file) => {
+
+		});
+		vault.on("rename", (_file) => {
+
+		});
 
         // This creates an icon in the left ribbon.
         const ribbonIconEl = this.addRibbonIcon('dice', 'Obsidian RPC', (evt: MouseEvent) => {
@@ -79,7 +118,9 @@ export default class RPCPlugin extends Plugin {
     }
 
     onunload() {
-
+		if (this.ipcServer !== null) {
+			this.ipcServer.close();
+		}
     }
 
     async loadSettings() {
