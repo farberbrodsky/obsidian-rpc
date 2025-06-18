@@ -52,7 +52,7 @@ export default class RPCPlugin extends Plugin {
         return lines.join("\n");
     }
 
-    startIpc(): void {
+    startIpcServer(): void {
         const sockPath = getServerSocketPath();
         const server = net.createServer({ allowHalfOpen: false }, (socket: net.Socket) => {
             console.log("client connected");
@@ -72,6 +72,14 @@ export default class RPCPlugin extends Plugin {
         server.listen(sockPath);
     }
 
+    closeIpcServer(): void {
+        if (this.ipcServer !== null) {
+            this.ipcServer.close();
+            this.ipcServer = null;
+            this.ipcServerError = null;
+        }
+    }
+
     async onload() {
         await this.loadSettings();
 
@@ -85,6 +93,9 @@ export default class RPCPlugin extends Plugin {
         this.registerEvent(vault.on("modify", this.state.vaultOnCreateOrModify.bind(this.state)));
         this.registerEvent(vault.on("delete", this.state.vaultOnDelete.bind(this.state)));
         this.registerEvent(vault.on("rename", this.state.vaultOnRename.bind(this.state)));
+        this.registerEvent(this.app.workspace.on("quit", _ => {
+            this.closeIpcServer();
+        }));
 
         // Initialize with all existing files
         for (const file of vault.getFiles()) {
@@ -92,7 +103,7 @@ export default class RPCPlugin extends Plugin {
         }
 
         // Start listening over a unix domain socket
-        this.startIpc();
+        this.startIpcServer();
 
         // This adds a simple command that can show IPC status
         this.addCommand({
@@ -164,9 +175,7 @@ export default class RPCPlugin extends Plugin {
     }
 
     onunload() {
-        if (this.ipcServer !== null) {
-            this.ipcServer.close();
-        }
+        this.closeIpcServer();
     }
 
     async loadSettings() {
