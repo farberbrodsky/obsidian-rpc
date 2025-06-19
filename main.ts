@@ -1,4 +1,4 @@
-import { App, Modal, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Editor, Modal, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
 import * as net from "node:net";
 import {getServerSocketPath} from "./src/util";
 import {State} from "./src/State";
@@ -84,8 +84,25 @@ export default class RPCPlugin extends Plugin {
         this.statusBarItem = this.addStatusBarItem();
 
         // Track all markdown files
+        const app = this.app;
         const vault = this.app.vault;
-        this.state = new State(vault);
+        this.state = new State(vault, {
+            goTo(filename, line, column) {
+                console.log("goTo", filename, line, column);
+                const file = vault.getAbstractFileByPath(filename);
+                if (!(file instanceof TFile)) {
+                    console.log("goTo: not a file");
+                    return;
+                }
+                const tab = app.workspace.getLeaf();
+                tab.openFile(file);
+                if (!tab.view || !("editor" in tab.view)) {
+                    console.log("goTo: no editor");
+                    return;
+                }
+                (tab.view.editor as Editor).setCursor({ line: line, ch: column });
+            },
+        });
         this.registerEvent(vault.on("create", this.state.vaultOnCreateOrModify.bind(this.state)));
         this.registerEvent(vault.on("modify", this.state.vaultOnCreateOrModify.bind(this.state)));
         this.registerEvent(vault.on("delete", this.state.vaultOnDelete.bind(this.state)));

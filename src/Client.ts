@@ -15,6 +15,13 @@ export type RemoveMessage = {
 
 export type UpdateMessage = SendMessage | RemoveMessage;
 
+export type RevealMessage = {
+    op: "reveal";
+    docId: number;
+};
+
+export type RequestMessage = RevealMessage;
+
 export default class Client extends JsonSocket {
     private constructor(public appState: State, socket: net.Socket) {
         super(socket);
@@ -31,14 +38,28 @@ export default class Client extends JsonSocket {
     }
 
     onJson(o: object) {
-        console.log("Got a JSON object:", o);
+        console.log("Got a JSON object from a client:", o);
+        if (!("op" in o)) {
+            console.log("Unexpected JSON object without an op field:", o);
+            return;
+        }
+        switch (o.op) {
+            case "reveal": {
+                const msg = o as RevealMessage;
+                this.appState.onRevealMessage(msg);
+            } break;
+
+            default: {
+                console.log("Unexpected JSON message type in RPC:", o.op);
+            } break;
+        }
     }
 
     sendDocument(doc: Doc.Root): void {
-        this.sendJson({ op: "send", doc });
+        this.sendJson({ op: "send", doc } as SendMessage);
     }
 
     removeDocument(filename: string): void {
-        this.sendJson({ op: "remove", filename });
+        this.sendJson({ op: "remove", filename } as RemoveMessage);
     }
 }

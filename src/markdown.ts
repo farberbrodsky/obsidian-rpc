@@ -5,7 +5,8 @@ import * as Md from "mdast";
 import * as Doc from "./document";
 
 export type SectionIdInfo = {
-    mdNode: Md.Node
+    filename: string;
+    mdNode: Md.Node;
 };
 
 export class IdAllocator {
@@ -72,7 +73,7 @@ function buildDocumentRec(
 
             const heading = (md as Md.Heading);
             const section: Doc.Section = { kind: "section", level: heading.depth, blocks: [], children: [], id: idAllocator.allocate() };
-            sectionIdMap.set(section.id, { mdNode: md });
+            sectionIdMap.set(section.id, { mdNode: md, filename });
 
             // Everything within its depth is considered to be its child in Noteify documents
             let parentSection = sectionStack[sectionStack.length - 1];
