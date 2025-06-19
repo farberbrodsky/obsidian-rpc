@@ -24,6 +24,20 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
         }
         return false;
     }
+    const handleGenericInline = (p: Md.Parent, doc: Doc.Inline & Doc.InlineParent): null | true => {
+        // We assume we are inline
+        if (!inlineParentStack.length)
+            return null;
+
+        pushInline(doc);
+
+        // Children of the link are its contents.
+        inlineParentStack.push(doc);
+        if (iterateChildren(p))
+            return null;
+        inlineParentStack.pop();
+        return true;
+    }
 
     // console.log("buildDocumentRec", md, sectionStack, inlineParentStack);
 
@@ -85,18 +99,21 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
         } break;
 
         case "link": {
-            // We assume we are inline
-            if (!inlineParentStack.length)
-                return null;
-
             const link: Doc.Link = { kind: "link", destination: (md as Md.Link).url, children: [] };
-            pushInline(link);
-
-            // Children of the link are its contents.
-            inlineParentStack.push(link);
-            if (iterateChildren(md as Md.Link))
+            if (handleGenericInline(md as Md.Link, link) === null)
                 return null;
-            inlineParentStack.pop();
+        } break;
+
+        case "strong": {
+            const bold: Doc.Bold = { kind: "bold", children: [] };
+            if (handleGenericInline(md as Md.Strong, bold) === null)
+                return null;
+        } break;
+
+        case "emphasis": {
+            const bold: Doc.Italics = { kind: "italics", children: [] };
+            if (handleGenericInline(md as Md.Emphasis, bold) === null)
+                return null;
         } break;
 
         default: {
@@ -109,7 +126,7 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
 
 export function parseDocument(filename: string, markdownContents: string): Doc.Root | null {
     const md = parseMarkdown(markdownContents);
-    // console.log(md);  // useful for debugging and adding features
+    console.log(md);  // useful for debugging and adding features
     const root: Doc.Root = { kind: "root", filename, blocks: [] };
     return buildDocumentRec(md, [root], []);
 }
