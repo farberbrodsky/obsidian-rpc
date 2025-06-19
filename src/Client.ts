@@ -1,5 +1,6 @@
 import * as net from "node:net";
 import * as Doc from "./document";
+import { State } from "./State";
 
 type SendMessage = {
     op: "send";
@@ -14,10 +15,21 @@ type RemoveMessage = {
 type Message = SendMessage | RemoveMessage;
 
 export default class Client {
-    constructor(public socket: net.Socket) {
-        socket.on("end", () => {
-            console.log("client disconnected")
-        });
+    private constructor(public appState: State, public socket: net.Socket) {}
+
+    static newConnection(appState: State, socket: net.Socket): void {
+        const result = new Client(appState, socket);
+        socket.on("end", result.onSocketEnd.bind(result));
+        socket.on("data", result.onSocketData.bind(result));
+        appState.addClient(result);
+    }
+
+    onSocketEnd() {
+        this.appState.removeClient(this);
+    }
+
+    onSocketData(data: Buffer) {
+        console.log("received:", data);
     }
 
     sendJson(m: Message) {

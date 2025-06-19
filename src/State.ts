@@ -45,6 +45,10 @@ export class State {
         this.listeningClients.push(c);
     }
 
+    removeClient(c: Client) {
+        this.listeningClients.remove(c);
+    }
+
 
     // Vault event handlers
     vaultOnCreateOrModify(maybeFile: TAbstractFile): void {

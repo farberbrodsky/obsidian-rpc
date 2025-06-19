@@ -54,10 +54,7 @@ export default class RPCPlugin extends Plugin {
 
     startIpcServer(): void {
         const sockPath = getServerSocketPath();
-        const server = net.createServer({ allowHalfOpen: false }, (socket: net.Socket) => {
-            console.log("client connected");
-            this.state.addClient(new Client(socket));
-        })
+        const server = net.createServer({ allowHalfOpen: false }, Client.newConnection.bind(null, this.state))
         this.ipcServer = server;
         this.ipcServerError = null;
         this.updateStatusText();
