@@ -4,6 +4,10 @@ import {gfm} from "micromark-extension-gfm";
 import * as Md from "mdast";
 import * as Doc from "./document";
 
+export type SectionIdInfo = {
+    mdNode: Md.Node
+};
+
 export class IdAllocator {
     nextId = 0;
     allocate(): number {
@@ -19,12 +23,19 @@ function parseMarkdown(contents: string): Md.Root {
     return tree;
 }
 
-function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[], inlineParentStack: Doc.InlineParent[], idAllocator: IdAllocator): Doc.Root | null {
+function buildDocumentRec(
+    /* current node */
+    md: Md.Node,
+    /* current parsing state and position */
+    sectionStack: (Doc.Root | Doc.Section)[], inlineParentStack: Doc.InlineParent[],
+    /* annotate information about the result */
+    idAllocator: IdAllocator, sectionIdMap: Map<Doc.SectionId, SectionIdInfo>, filename: string
+): [Doc.Root, Map<Doc.SectionId, SectionIdInfo>] | null {
     const pushToSection = (b: Doc.Block) => sectionStack[sectionStack.length - 1].blocks.push(b);
     const pushInline = (b: Doc.Inline) => inlineParentStack[inlineParentStack.length - 1].children.push(b);
     const iterateChildren = (p: Md.Parent) => {
         for (const child of p.children) {
-            const result = buildDocumentRec(child, sectionStack, inlineParentStack, idAllocator);
+            const result = buildDocumentRec(child, sectionStack, inlineParentStack, idAllocator, sectionIdMap, filename);
             // null means error
             if (result === null)
                 return true;
@@ -61,6 +72,7 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
 
             const heading = (md as Md.Heading);
             const section: Doc.Section = { kind: "section", level: heading.depth, blocks: [], children: [], id: idAllocator.allocate() };
+            sectionIdMap.set(section.id, { mdNode: md });
 
             // Everything within its depth is considered to be its child in Noteify documents
             let parentSection = sectionStack[sectionStack.length - 1];
@@ -128,12 +140,13 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
         } break;
     }
 
-    return sectionStack[0] as Doc.Root;
+    return [sectionStack[0] as Doc.Root, sectionIdMap];
 }
 
-export function parseDocument(filename: string, markdownContents: string, idAllocator: IdAllocator): Doc.Root | null {
+export function parseDocument(filename: string, markdownContents: string, idAllocator: IdAllocator): [Doc.Root, Map<Doc.SectionId, SectionIdInfo>] | null {
     const md = parseMarkdown(markdownContents);
     console.log(md);  // useful for debugging and adding features
     const root: Doc.Root = { kind: "root", filename, blocks: [] };
-    return buildDocumentRec(md, [root], [], idAllocator);
+    const sectionIdMap: Map<Doc.SectionId, SectionIdInfo> = new Map();
+    return buildDocumentRec(md, [root], [], idAllocator, sectionIdMap, filename);
 }
