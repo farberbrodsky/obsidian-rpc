@@ -1,5 +1,5 @@
 import { TAbstractFile, TFile, Vault } from "obsidian";
-import { parseDocument } from "./markdown";
+import { IdAllocator, parseDocument } from "./markdown";
 import * as Doc from "./document";
 import Client from "./Client";
 
@@ -13,13 +13,18 @@ function isMarkdownFile(maybeFile: TAbstractFile): TFile | null {
 export class State {
     documentByPath: Map<string, Doc.Root> = new Map();
     listeningClients: Client[] = [];
+    /**
+     * all section objects are given unique incrementing IDs.
+     * Even if the contents stayed the same, every update to a file leads to entirely new IDs.
+     */
+    idAllocator: IdAllocator = new IdAllocator();
 
     constructor(public vault: Vault) {}
 
 
     // Core index functions: get a path to a markdown file, and set or delete the contents
     indexSetByPathAndContents(path: string, contents: string): void {
-        const parsed = parseDocument(path, contents);
+        const parsed = parseDocument(path, contents, this.idAllocator);
         console.log("contents:", contents.slice(0, 50), "...");
         console.log("parsed:", parsed);
         if (parsed !== null) {

@@ -4,6 +4,13 @@ import {gfm} from "micromark-extension-gfm";
 import * as Md from "mdast";
 import * as Doc from "./document";
 
+export class IdAllocator {
+    nextId = 0;
+    allocate(): number {
+        return this.nextId++;
+    }
+}
+
 function parseMarkdown(contents: string): Md.Root {
     const tree = fromMarkdown(contents, {
         extensions: [gfm()],
@@ -12,12 +19,12 @@ function parseMarkdown(contents: string): Md.Root {
     return tree;
 }
 
-function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[], inlineParentStack: Doc.InlineParent[]): Doc.Root | null {
+function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[], inlineParentStack: Doc.InlineParent[], idAllocator: IdAllocator): Doc.Root | null {
     const pushToSection = (b: Doc.Block) => sectionStack[sectionStack.length - 1].blocks.push(b);
     const pushInline = (b: Doc.Inline) => inlineParentStack[inlineParentStack.length - 1].children.push(b);
     const iterateChildren = (p: Md.Parent) => {
         for (const child of p.children) {
-            const result = buildDocumentRec(child, sectionStack, inlineParentStack);
+            const result = buildDocumentRec(child, sectionStack, inlineParentStack, idAllocator);
             // null means error
             if (result === null)
                 return true;
@@ -53,7 +60,7 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
                 return null;
 
             const heading = (md as Md.Heading);
-            const section: Doc.Section = { kind: "section", level: heading.depth, blocks: [], children: [] };
+            const section: Doc.Section = { kind: "section", level: heading.depth, blocks: [], children: [], id: idAllocator.allocate() };
 
             // Everything within its depth is considered to be its child in Noteify documents
             let parentSection = sectionStack[sectionStack.length - 1];
@@ -124,9 +131,9 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
     return sectionStack[0] as Doc.Root;
 }
 
-export function parseDocument(filename: string, markdownContents: string): Doc.Root | null {
+export function parseDocument(filename: string, markdownContents: string, idAllocator: IdAllocator): Doc.Root | null {
     const md = parseMarkdown(markdownContents);
     console.log(md);  // useful for debugging and adding features
     const root: Doc.Root = { kind: "root", filename, blocks: [] };
-    return buildDocumentRec(md, [root], []);
+    return buildDocumentRec(md, [root], [], idAllocator);
 }

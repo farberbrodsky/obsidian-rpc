@@ -11,6 +11,7 @@ export type Section = {
     level: number;
     blocks: Block[];
     children: Inline[];
+    id: number;
 };
 
 export type ContentBlock = {
