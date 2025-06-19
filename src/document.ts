@@ -47,4 +47,4 @@ export type Root = {
     kind: "root";
     filename: string;
     blocks: Block[];
-}
+};

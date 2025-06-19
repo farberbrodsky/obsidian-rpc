@@ -9,7 +9,7 @@ type SendMessage = {
 
 type RemoveMessage = {
     op: "remove";
-    path: string;
+    filename: string;
 };
 
 type Message = SendMessage | RemoveMessage;
@@ -40,7 +40,7 @@ export default class Client {
         this.sendJson({ op: "send", doc });
     }
 
-    removeDocument(path: string): void {
-        this.sendJson({ op: "remove", path });
+    removeDocument(filename: string): void {
+        this.sendJson({ op: "remove", filename });
     }
 }

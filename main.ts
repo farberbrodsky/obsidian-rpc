@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Modal, Plugin, PluginSettingTab, Setting } from "obsidian";
 import * as net from "node:net";
 import {getServerSocketPath} from "./src/util";
 import {State} from "./src/State";
