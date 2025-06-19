@@ -1,39 +1,37 @@
 import * as net from "node:net";
 import * as Doc from "./document";
 import { State } from "./State";
+import JsonSocket from "./JsonSocket";
 
-type SendMessage = {
+export type SendMessage = {
     op: "send";
     doc: Doc.Root;
 };
 
-type RemoveMessage = {
+export type RemoveMessage = {
     op: "remove";
     filename: string;
 };
 
-type Message = SendMessage | RemoveMessage;
+export type UpdateMessage = SendMessage | RemoveMessage;
 
-export default class Client {
-    private constructor(public appState: State, public socket: net.Socket) {}
+export default class Client extends JsonSocket {
+    private constructor(public appState: State, socket: net.Socket) {
+        super(socket);
+    }
 
     static newConnection(appState: State, socket: net.Socket): void {
         const result = new Client(appState, socket);
-        socket.on("end", result.onSocketEnd.bind(result));
-        socket.on("data", result.onSocketData.bind(result));
         appState.addClient(result);
     }
 
     onSocketEnd() {
+        console.log("Socket end");
         this.appState.removeClient(this);
     }
 
-    onSocketData(data: Buffer) {
-        console.log("received:", data);
-    }
-
-    sendJson(m: Message) {
-        this.socket.write(JSON.stringify(m) + "\n");
+    onJson(o: object) {
+        console.log("Got a JSON object:", o);
     }
 
     sendDocument(doc: Doc.Root): void {
