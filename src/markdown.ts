@@ -84,6 +84,21 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
             pushInline(text);
         } break;
 
+        case "link": {
+            // We assume we are inline
+            if (!inlineParentStack.length)
+                return null;
+
+            const link: Doc.Link = { kind: "link", destination: (md as Md.Link).url, children: [] };
+            pushInline(link);
+
+            // Children of the link are its contents.
+            inlineParentStack.push(link);
+            if (iterateChildren(md as Md.Link))
+                return null;
+            inlineParentStack.pop();
+        } break;
+
         default: {
             // Does nothing. TODO: Don't just ignore things we don't recognize!
         } break;
@@ -94,6 +109,7 @@ function buildDocumentRec(md: Md.Node, sectionStack: (Doc.Root | Doc.Section)[],
 
 export function parseDocument(filename: string, markdownContents: string): Doc.Root | null {
     const md = parseMarkdown(markdownContents);
+    // console.log(md);  // useful for debugging and adding features
     const root: Doc.Root = { kind: "root", filename, blocks: [] };
     return buildDocumentRec(md, [root], []);
 }
